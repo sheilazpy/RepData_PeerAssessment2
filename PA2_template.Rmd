@@ -1,0 +1,320 @@
+---
+title: "Reproducible Research: Peer Assessment 2"
+output: 
+  html_document:
+    keep_md: true
+
+---
+
+
+# Harmful and Costly Weather Events in US
+Author: Sheila
+Date: December 15, 2014
+
+## 1. Synopsis
+
+In US, storm and other weather events cause a large loss for both population 
+health and economy every year.In order to reduce the loss and damage from these
+disaster, it is important to find out which of them are the most harmful and costly.
+For this purpose, this paper explored the storm database, a historical database about 
+weather event collected by U.S. National Oceanic and Atmospheric Administration's (NOAA). 
+After loading, extracting, transfromating, grouping, summerizing and plotting the data,
+this paper draws the follwing conclusions:
+
+-1. Across the United States, **TORNADO** and **EXCESSIVE HEAT** are the most harmful events to population health. 
+
+-2. **FLOOD** and **HURRICANE** have the greatest economic 
+consequences.
+
+## 2. Getting the data 
+
+**Data Source**
+        
+The data for this assignment can be downloaded from the [course web site](https://class.coursera.org/repdata-002/human_grading/view/courses/972084/assessments/4/submissions):
+        
+- Dataset: [Storm Data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2)
+
+Additional documentation of used the database can be found here:
+
+- Documentation: [Storm Data Documentation](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)
+
+- FAQ: [Storm Event FAQ](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf)
+
+
+**Initialization**
+```{r setwd, echo=FALSE, results='hide'}
+setwd("d:/ZPY/github/RepData_PeerAssessment2")
+```
+
+```{r setoptions}
+library(knitr);
+library(dplyr);
+library(reshape2);
+library(ggplot2);
+library(gridExtra);
+Sys.setlocale('LC_ALL', 'English'); #If your system is not in English. 
+Sys.setenv(LANG = "en_US.UTF-8");
+opts_chunk$set(echo=TRUE);
+#opts_chunk$set(echo=TRUE, cache = TRUE)
+#sessionInfo()
+```
+
+### 2.1 Data Downloading
+```{r download, echo=FALSE}
+if(!file.exists("./data")){dir.create("./data")} 
+sourcefile <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"  
+destfile   <- "./data/StormData.csv.bz2"  
+setInternet2(use = TRUE)
+if(!file.exists("./data/StormData.csv.bz2")){  
+  download.file(url = sourcefile, destfile = destfile)
+  dateDownloaded <- date()
+}
+```
+
+### 2.2 Data Loading 
+```{r load, cache=TRUE}
+if(!"stormData" %in% ls()){ 
+ # Read a bzip2 file directly
+ stormData <- read.csv(bzfile("./data/StormData.csv.bz2")) 
+}
+```
+
+### 2.3 Data Checking
+```{r check}
+dim(stormData) #902297     37
+#unique(sort(stormData$EVTYPE)) 
+length(levels(stormData$EVTYPE))  #985
+names(stormData)
+#str(stormData)
+#head(stormData)
+```
+There are 902297 observations with 37 variables in the database. And the total event types is 985, quiet different from the number described in the documentation, which says the possible events should be 48. 
+
+**Main data elements being used in this analysis**
+
+After taking a quick look at the dataset, the columns below are found to be related to health and economy loss:
+
+Data Column
+1. `EVTYPE` ~  Type of Events
+2. `FATALTIES` ~ The number of fatalities caused by the events
+3. `INJURIES` ~ The number of people injured by the events
+4. `PROPDMG` ~ The amount of property loss by the events
+5. `PROPDMGEXP` ~ The propery damage magnitude (millions, thousands,...). further information in Storm Data Documentation 
+6. `CROPDMG` ~ The amount of crop damage by the weather
+7. `CROPDMGEXP` ~ Thecrop Damage magnitude (millions, thousands,...).further information in Storm Data Documentation
+
+## 3. Data Processing
+
+### 3.1 Data Cleaning 
+
+There are lots of duplicate event types and requires a cleanup. Some issues include spelling errors and plurals of event descriptions. We have chosen a basic approach for now to cleanup the event types but a text mining or non systematic approach can be applied to do further cleanup of the data.
+
+```{r cleaning,cache=TRUE}
+length(unique(sort(stormData$EVTYPE)))
+# Cleaning the EVTYPE variable.
+stormData$EVTYPE<-toupper(stormData$EVTYPE)
+stormData$EVTYPE <- gsub("^\\s+|\\s+$", "", stormData$EVTYPE)#remove leading and trailing spaces
+stormData$EVTYPE <- gsub("[\\|/|-]", " ", stormData$EVTYPE) #remove /  \ - 
+stormData$EVTYPE <- gsub(pattern = "\\(|\\)",replacement = "", x = stormData$EVTYPE) 
+stormData$EVTYPE <- gsub(pattern = "\\(.+?\\)",replacement = "", x = stormData$EVTYPE)
+stormData$EVTYPE <- gsub(pattern = "[0-9]",replacement = "", x = stormData$EVTYPE)
+stormData$EVTYPE <- gsub(pattern = ".|:",replacement = "", x = stormData$EVTYPE,fixed = T)
+stormData$EVTYPE <- gsub(pattern = "TSTM",replacement ="THUNDERSTORM",x =stormData$EVTYPE ) 
+
+stormData$EVTYPE[grep(pattern = "^THUN", stormData$EVTYPE)]<-"THUNDERSTORM WIND"
+stormData$EVTYPE[grep(pattern = "^HURRICANE", stormData$EVTYPE)]<-"HURRICANE"
+stormData$EVTYPE[grep(pattern = "^FLASH FLO", stormData$EVTYPE)]<-"FLASH FLOOD"
+stormData$EVTYPE[grep(pattern = "^FLOOD", stormData$EVTYPE)]<-"FLOOD"
+stormData$EVTYPE[grep(pattern = "^TORN", stormData$EVTYPE)]<-"TORNADO"
+stormData$EVTYPE[grep(pattern = "^HEAVY RA", stormData$EVTYPE)]<-"HEAVY RAIN"
+stormData$EVTYPE[grep(pattern = "^HEAVY SN", stormData$EVTYPE)]<-"HEAVY SNOW"
+stormData$EVTYPE[grep(pattern = "^HIGH WI", stormData$EVTYPE)]<-"HIGH WIND"
+stormData$EVTYPE[grep(pattern = "^BEACH ERO", stormData$EVTYPE)]<-"BEACH EROSION"
+stormData$EVTYPE[grep(pattern = "^AVALAN", stormData$EVTYPE)]<-"AVALANCHE"
+stormData$EVTYPE[grep(pattern = "^BITTER WIND CHILL", stormData$EVTYPE)]<-"BITTER WIND CHILL"
+stormData$EVTYPE[grep(pattern = "^BLIZZARD", stormData$EVTYPE)]<-"BLIZZARD"
+stormData$EVTYPE[grep(pattern = "^EXTREME WIND", stormData$EVTYPE)]<-"EXTREME WIND"
+stormData$EVTYPE[grep(pattern = "^FREEZING RAIN", stormData$EVTYPE)]<-"FREEZING RAIN"
+stormData$EVTYPE[grep(pattern = "^FUNNEL", stormData$EVTYPE)]<-"FUNNEL CLOUD"
+stormData$EVTYPE[grep(pattern = "^BLOWING SNOW", stormData$EVTYPE)]<-"BLOWING SNOW"
+stormData$EVTYPE[grep(pattern = "^LIGHTNING", stormData$EVTYPE)]<-"LIGHTNING"
+stormData$EVTYPE[grep(pattern = "^RIP CURRENT", stormData$EVTYPE)]<-"RIP CURRENT"
+stormData$EVTYPE[grep(pattern = "^EXTREME COLD", stormData$EVTYPE)]<-"EXTREME COLD/WIND CHILL"
+stormData$EVTYPE[grep(pattern = "^EXTREME HEAT", stormData$EVTYPE)]<-"EXCESSIVE HEAT"
+stormData$EVTYPE[grep(pattern = "^WILD/FOREST FIRE", stormData$EVTYPE)]<-"WILDFIRE"
+stormData$EVTYPE[grep(pattern = "^COASTAL FL", stormData$EVTYPE)]<-"COASTAL FLOOD"
+stormData$EVTYPE[grep(pattern = "^COLD/WIND", stormData$EVTYPE)]<-"COLD/WIND CHILL"
+stormData$EVTYPE[grep(pattern = "^DRY MI", stormData$EVTYPE)]<-"DRY MICROBURST"
+stormData$EVTYPE[grep(pattern = "^DUST STORM", stormData$EVTYPE)]<-"DUST STORM"
+stormData$EVTYPE[grep(pattern = "^EXTREME WIND", stormData$EVTYPE)]<-"EXTREME COLD/WIND CHILL"
+stormData$EVTYPE[grep(pattern = "^FOREST FIRES", stormData$EVTYPE)]<-"WILDFIRE"
+stormData$EVTYPE[grep(pattern = "^WINTER STO", stormData$EVTYPE)]<-"WINTER STORM"
+stormData$EVTYPE[grep(pattern = "^WINTER WEAT", stormData$EVTYPE)]<-"WINTER WEATHER"
+stormData$EVTYPE[grep(pattern = "^TROPICAL STORM", stormData$EVTYPE)]<-"TROPICAL STORM"
+stormData$EVTYPE[grep(pattern = "^WATERS", stormData$EVTYPE)]<-"WATERSPOUT"
+stormData$EVTYPE[grep(pattern = "^GUSTY WI", stormData$EVTYPE)]<-"GUSTY WIND"
+stormData$EVTYPE[grep(pattern = "^WILD", stormData$EVTYPE)]<-"WILDFIRE"
+
+#str(stormData$EVTYPE)
+stormData$EVTYPE <- as.factor(stormData$EVTYPE)
+length(unique(sort(stormData$EVTYPE)))
+
+## Dealing with null numeric Values
+stormData[is.na(stormData$FATALITIES), "FATALITIES"] <- 0 
+stormData[is.na(stormData$INJURIES), "INJURIES"] <- 0 
+stormData[is.na(stormData$PROPDMG), "PROPDMG"] <- 0
+stormData[is.na(stormData$CROPDMG), "CROPDMG"] <- 0
+
+## check factor values 
+unique(stormData$PROPDMGEXP)
+sum(is.na(stormData$PROPDMGEXP))
+unique(stormData$CROPDMGEXP)
+sum(is.na(stormData$CROPDMGEXP))
+ 
+## Dealing with factor Values  
+stormData$CROPDMGEXP <- toupper(stormData$CROPDMGEXP) # h-> H, m -> M, k -> K
+stormData$PROPDMGEXP <- toupper(stormData$PROPDMGEXP) # h-> H, m -> M, k -> K
+
+stormData[stormData$PROPDMGEXP %in% c(""), "PROPDMGEXP"] <- "0"#empty string is 0
+stormData[stormData$PROPDMGEXP %in% c("?", "+", "-"), "PROPDMGEXP"] <- "1"# '+', '-', '?' are mapped to 1
+stormData[stormData$CROPDMGEXP %in% c("") , "CROPDMGEXP"] <- "0"#empty string is 0
+stormData[stormData$CROPDMGEXP %in% c("?") , "CROPDMGEXP"] <- "1"# '?' are mapped to 1
+
+## Integrate the factor field into numeric value field
+toDollars <- function(x, dmgFieldName, dmgExpFieldName) {
+    ## To set the real value of dmgFieldName by the dmgExpFieldName
+    
+    x$multiplier <- 1
+
+    ## now set a better multiplier based on the exponent. 
+    x$multiplier[x[dmgExpFieldName]=="1"] <- 10^1
+    x$multiplier[x[dmgExpFieldName]=="H"] <- 10^2
+    x$multiplier[x[dmgExpFieldName]=="K"] <- 10^3
+    x$multiplier[x[dmgExpFieldName]=="M"] <- 10^6
+    x$multiplier[x[dmgExpFieldName]=="B"] <- 10^9
+
+    ## multiply the values 
+    x[dmgFieldName] <- x[dmgFieldName] * x$multiplier
+
+    ## clear the multiplier field out. 
+    x$multiplier <- NULL 
+    x
+}
+
+stormData <- toDollars(stormData, "PROPDMG", "PROPDMGEXP")
+stormData <- toDollars(stormData, "CROPDMG", "CROPDMGEXP")
+
+# Add column year by BGN_DATE
+stormData <- mutate(stormData, year = as.numeric(format(as.Date(gsub(" 0:00:00","", stormData$BGN_DATE), format = "%m/%d/%Y"), format = "%Y")))
+#  plot hostogram of dataMutate$year
+# hist(stormData$year, breaks = 62, col = rainbow(2, start=0, end=0.7, alpha=0.5), main = "Overall Storm Events Distributation by Year", xlab = "Year")
+```
+
+### 3.2 Data Transformation
+
+**Data selecting**
+
+```{r select, cache=TRUE}
+data <- tbl_df(stormData)
+data <- select(data, year, EVTYPE, FATALITIES : CROPDMGEXP)
+dim(data)
+```
+
+**Data filtering with events > 0 and year after 1991**
+
+The events in the database start in the year 1950 and end in November 2011. In the earlier years of the database there are generally fewer events recorded, most likely due to a lack of good records. More recent years should be considered more complete.
+
+For the analyse we will focus on those events who fits to at least one of the following createria:
+
+-FATALITIES > 0
+
+-INJURIES > 0
+
+-PROPDMG > 0
+
+-CROPDMG > 0
+
+Meanwhile, according to the histogram above, we select the data after 1991 for the next processing.
+
+```{r filter, cache=TRUE} 
+## Only care about events after 1991 and with health or economic consequence
+data <- filter(data, data$FATALITIES > 0 |data$INJURIES > 0 |data$PROPDMG > 0 | data$CROPDMG > 0, data$year >= 1991 )
+dim(data)
+
+```
+
+### 3.3 Data Grouping by Event type, Summarizing and Sorting to get the top 20 events
+
+```{r sumByEvtype}
+
+by_evtype <- group_by(data, EVTYPE)
+
+sumPeople <- summarize(by_evtype, totalFatalities = sum(FATALITIES) , totalInjuries = sum(INJURIES))
+sumPeople <- mutate(sumPeople, totalPeople = totalFatalities + totalInjuries)
+sumPeople <- arrange(sumPeople, desc(totalPeople))[1:20,  ]
+str(sumPeople)
+sumPeople
+
+sumDamage <- summarize(by_evtype, totalPropDMG = sum(PROPDMG), totalCropDMG = sum(CROPDMG))
+sumDamage <- mutate(sumDamage, totalDamage = totalPropDMG + totalCropDMG )
+sumDamage <- arrange(sumDamage, desc(totalDamage))[1:20,  ]
+str(sumDamage)
+sumDamage
+
+```
+
+## 4. Results
+
+### 4.1 Top Harmful Event Types to population health 
+
+```{r health}
+
+
+p1data <- select(sumPeople,EVTYPE, totalFatalities, totalInjuries)
+p2data <- select(sumPeople,EVTYPE, totalPeople)
+
+p1data <- melt(p1data, id.vars = c("EVTYPE"))
+p2data <- melt(p2data, id.vars = c("EVTYPE"))
+
+p1 <- ggplot(data=p1data, aes(x=reorder(EVTYPE, -value), y=value)) + geom_bar(aes(fill=variable), stat="identity", postion = "dodge") +  theme(plot.margin=unit(c(1,1,-0.3,.91), "cm"))  + labs(x = "", y = "# Killed/Injured[100]") + scale_fill_discrete(name = "Health Effect") + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+#p1 + coord_flip()
+
+
+p2 <- ggplot(p2data, aes(x=reorder(EVTYPE, -value), y=value)) + geom_bar(aes(fill=variable), stat="identity", postion = "dodge") +  theme(plot.margin=unit(c(-0.3,1,1,1), "cm")) +labs(y=expression(paste("(", log[10], ")"))) + theme(axis.text.x = element_text(size = 8, angle = 90, hjust = 1, vjust = 0.25)) + scale_y_log10()
+grid.arrange(p1, p2, nrow=2, main="Harmful Events TO Population Health" ) 
+```
+
+
+According to the data demonstrated in above figure, among these types of weather disaster, **TORNADO** and **EXCESSIVE HEAT** are most dangerous for public health. 
+
+
+### 4.2 Top Economy-affecting Weather Events
+
+```{r damage}
+
+p3data <- select(sumDamage, EVTYPE, totalPropDMG, totalCropDMG)
+p3data <- melt(p3data, id.vars = c("EVTYPE"))
+p4data <- select(sumDamage, EVTYPE, totalDamage)
+p4data <- melt(p4data , id.vars = c("EVTYPE"))
+p3 <- ggplot(data=p3data, aes(x=reorder(EVTYPE, -value), y=value)) + geom_bar(aes(fill=variable), stat="identity", postion = "dodge") +  theme(plot.margin=unit(c(1,1,-0.3,.91), "cm"))  + labs(x = "", y = "# Prop/Crop Damages[Mils]") + scale_fill_discrete(name = "Damage Type") + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+#p3 + coord_flip()
+p4 <- ggplot(data=p4data, aes(x=reorder(EVTYPE, -value), y=value)) + geom_bar(aes(fill=variable), stat="identity", postion = "dodge") +  theme(plot.margin=unit(c(-0.3,1,1,1), "cm"))  +  labs(y=expression(paste("(", log[10], ")"))) + theme(axis.text.x = element_text(size = 8, angle = 90, hjust = 1, vjust = 0.25)) + scale_y_log10() 
+
+grid.arrange(p3, p4, nrow=2, main="Top Costly Event Types On Economy" ) 
+```
+
+As it showed in the second figure,  **FLOOD** and **HURRICANE** cause most econimal loss.
+
+## Appendix 1: Environment Details
+
+```{r}
+sessionInfo()
+```
+
+If your system is not in english, be sure to set the global environment as english:
+
+- Sys.setlocale('LC_ALL', 'English')
+
+```{r comment,echo=FALSE}
+## To get the corresponding html, md and the figure files, you should specify the encoding as “UTF-8”: knit2html(input = “PA2_template.Rmd”, encoding = “UTF-8”)
+```
