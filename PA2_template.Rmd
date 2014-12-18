@@ -315,6 +315,8 @@ If your system is not in english, be sure to set the global environment as engli
 
 - Sys.setlocale('LC_ALL', 'English')
 
+- Sys.setenv(LANG = "en_US.UTF-8")
+
 ```{r comment,echo=FALSE}
 ## To get the corresponding html, md and the figure files, you should specify the encoding as “UTF-8”: knit2html(input = “PA2_template.Rmd”, encoding = “UTF-8”)
 ```
